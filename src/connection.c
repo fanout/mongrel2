@@ -859,8 +859,10 @@ static int connection_sni_cb(void *p_conn, ssl_context *ssl, const unsigned char
     int i;
     int rc = 0;
     bstring hostname = NULL;
+    bstring tryhostname = NULL;
     bstring certpath = NULL;
     bstring keypath = NULL;
+    bstring tmpstr;
 
     hostname = blk2bstr((const char *)chostname, chostname_len);
     check(hostname != NULL, "Allocation failed");
@@ -886,19 +888,37 @@ static int connection_sni_cb(void *p_conn, ssl_context *ssl, const unsigned char
     bstring certdir = Setting_get_str("certdir", NULL);
     check(certdir != NULL, "to use ssl, you must specify a certdir");
 
-    certpath = bformat("%s%s.crt", bdata(certdir), bdata(hostname));
-    check_mem(certpath);
+    // try to find a file named after the exact host, then start chopping off
+    //   subdomains and keep trying until we find a file that matches. this is
+    //   to support wildcard certs
+    tryhostname = bstrcpy(hostname);
+    while(1)
+    {
+        certpath = bformat("%s%s.crt", bdata(certdir), bdata(tryhostname));
+        check_mem(certpath);
 
-    keypath = bformat("%s%s.key", bdata(certdir), bdata(hostname));
+        rc = x509_crt_parse_file(&conn->own_cert, bdata(certpath));
+        if(rc == 0)
+            break;
+
+        i = bstrchr(tryhostname, '.');
+        check(i != BSTR_ERR, "Failed to find cert for %s", bdata(hostname));
+        ++i;
+        check(i < blength(tryhostname), "Failed to find cert for %s", bdata(hostname));
+
+        tmpstr = tryhostname;
+        tryhostname = bmidstr(tmpstr, i, blength(tmpstr) - i);
+        bdestroy(tmpstr);
+    }
+
+    keypath = bformat("%s%s.key", bdata(certdir), bdata(tryhostname));
     check_mem(keypath);
-
-    rc = x509_crt_parse_file(&conn->own_cert, bdata(certpath));
-    check(rc == 0, "Failed to load cert from %s", bdata(certpath));
 
     rc = pk_parse_keyfile(&conn->pk_key, bdata(keypath), NULL);
     check(rc == 0, "Failed to load key from %s", bdata(keypath));
 
     bdestroy(hostname);
+    bdestroy(tryhostname);
     bdestroy(certpath);
     bdestroy(keypath);
 
@@ -914,6 +934,7 @@ error:
     pk_free(&conn->pk_key);
 
     bdestroy(hostname);
+    if(tryhostname != NULL) bdestroy(tryhostname);
     if(certpath != NULL) bdestroy(certpath);
     if(keypath != NULL) bdestroy(keypath);
 
