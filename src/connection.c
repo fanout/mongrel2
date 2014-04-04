@@ -859,9 +859,9 @@ static int connection_sni_cb(void *p_conn, ssl_context *ssl, const unsigned char
     int i;
     int rc = 0;
     bstring hostname = NULL;
-    bstring tryhostname = NULL;
     bstring certpath = NULL;
     bstring keypath = NULL;
+    bstring tryhostpattern = NULL;
     bstring tmpstr;
 
     hostname = blk2bstr((const char *)chostname, chostname_len);
@@ -872,13 +872,10 @@ static int connection_sni_cb(void *p_conn, ssl_context *ssl, const unsigned char
     //   on each byte, so there's no worry of them getting caught.
     for(i = 0; i < blength(hostname); ++i) {
         unsigned char c = bdata(hostname)[i];
-        if(c < 0x20 || c == '/')
-        {
+        if(c < 0x20 || c == '/') {
             log_warn("SNI: invalid hostname provided");
             return -1;
-        }
-        else if(c <= 0x7f)
-        {
+        } else if(c <= 0x7f) {
             // FIXME: it's wrong to use tolower() on a utf8 string, but it
             //   will probably work well enough for most people
             bdata(hostname)[i] = (unsigned char)tolower(c);
@@ -888,37 +885,41 @@ static int connection_sni_cb(void *p_conn, ssl_context *ssl, const unsigned char
     bstring certdir = Setting_get_str("certdir", NULL);
     check(certdir != NULL, "to use ssl, you must specify a certdir");
 
-    // try to find a file named after the exact host, then start chopping off
-    //   subdomains and keep trying until we find a file that matches. this is
-    //   to support wildcard certs
-    tryhostname = bstrcpy(hostname);
-    while(1)
-    {
-        certpath = bformat("%s%s.crt", bdata(certdir), bdata(tryhostname));
+    // try to find a file named after the exact host, then try with a wildcard pattern at the
+    //   same subdomain level. the file format uses underscores instead of asterisks. so, a
+    //   domain of www.example.com will attempt to be matched against a file named
+    //   www.example.com.crt and _.example.com.crt. wildcards at other levels are not supported.
+
+    tryhostpattern = bstrcpy(hostname);
+    certpath = bformat("%s%s.crt", bdata(certdir), bdata(tryhostpattern));
+    check_mem(certpath);
+
+    rc = x509_crt_parse_file(&conn->own_cert, bdata(certpath));
+    if(rc != 0) {
+        i = bstrchr(tryhostpattern, '.');
+        check(i != BSTR_ERR, "Failed to find cert for %s", bdata(hostname));
+
+        tmpstr = bmidstr(tryhostpattern, i, blength(tryhostpattern) - i);
+        bdestroy(tryhostpattern);
+        tryhostpattern = bfromcstr("_");
+        bconcat(tryhostpattern, tmpstr);
+        bdestroy(tmpstr);
+
+        certpath = bformat("%s%s.crt", bdata(certdir), bdata(tryhostpattern));
         check_mem(certpath);
 
         rc = x509_crt_parse_file(&conn->own_cert, bdata(certpath));
-        if(rc == 0)
-            break;
-
-        i = bstrchr(tryhostname, '.');
-        check(i != BSTR_ERR, "Failed to find cert for %s", bdata(hostname));
-        ++i;
-        check(i < blength(tryhostname), "Failed to find cert for %s", bdata(hostname));
-
-        tmpstr = tryhostname;
-        tryhostname = bmidstr(tmpstr, i, blength(tmpstr) - i);
-        bdestroy(tmpstr);
+        check(rc == 0, "Failed to find cert for %s", bdata(hostname));
     }
 
-    keypath = bformat("%s%s.key", bdata(certdir), bdata(tryhostname));
+    keypath = bformat("%s%s.key", bdata(certdir), bdata(tryhostpattern));
     check_mem(keypath);
 
     rc = pk_parse_keyfile(&conn->pk_key, bdata(keypath), NULL);
     check(rc == 0, "Failed to load key from %s", bdata(keypath));
 
     bdestroy(hostname);
-    bdestroy(tryhostname);
+    bdestroy(tryhostpattern);
     bdestroy(certpath);
     bdestroy(keypath);
 
@@ -934,7 +935,7 @@ error:
     pk_free(&conn->pk_key);
 
     bdestroy(hostname);
-    if(tryhostname != NULL) bdestroy(tryhostname);
+    if(tryhostpattern != NULL) bdestroy(tryhostpattern);
     if(certpath != NULL) bdestroy(certpath);
     if(keypath != NULL) bdestroy(keypath);
 
