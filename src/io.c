@@ -332,10 +332,10 @@ static int simple_set_cache( void *p_ssl, const ssl_session *ssn )
     }
 
     if(make_new) {
-        if (SSL_SESSION_CACHE->end >= SSL_CACHE_SIZE_LIMIT) {
+        if (darray_end(SSL_SESSION_CACHE) >= SSL_CACHE_SIZE_LIMIT) {
             darray_remove_and_resize(SSL_SESSION_CACHE, 0, SSL_CACHE_LIMIT_REMOVE_COUNT);
         }
-        
+
         cur = (ssl_session *) darray_new(SSL_SESSION_CACHE);
         check_mem(cur);
         darray_push(SSL_SESSION_CACHE, cur);
