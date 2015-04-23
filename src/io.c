@@ -257,8 +257,8 @@ void ssl_debug(void *p, int level, const char *msg)
  */
 static darray_t *SSL_SESSION_CACHE = NULL;
 const int SSL_INITIAL_CACHE_SIZE = 300;
-const int SSL_CACHE_SIZE_LIMIT = 100000;
-const int SSL_CACHE_LIMIT_REMOVE_COUNT = 10000;
+const int SSL_CACHE_SIZE_LIMIT = 1000;
+const int SSL_CACHE_LIMIT_REMOVE_COUNT = 100;
 
 static inline int setup_ssl_session_cache()
 {
