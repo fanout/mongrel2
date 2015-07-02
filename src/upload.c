@@ -202,6 +202,9 @@ int Upload_stream(Connection *conn, Handler *handler, int content_len)
 
     debug("max content length: %d, content_len: %d", MAX_CONTENT_LENGTH, content_len);
 
+    // in case the connection was reused, it should start from 0 credits
+    conn->sendCredits = 0;
+
     if(content_len == -1) {
         IOBuf_resize(conn->iob, MAX_CHUNK_SIZE + 1024); // give us a good buffer size
         chunked = 1;
@@ -288,9 +291,6 @@ int Upload_stream(Connection *conn, Handler *handler, int content_len)
         first_read = 0;
         offset += avail;
     }
-
-    // if the connection is reused, it should start from 0 credits
-    conn->sendCredits = 0;
 
     check(eof, "Failed to write everything to the handler.");
 
