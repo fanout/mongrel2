@@ -237,7 +237,7 @@ int Upload_stream(Connection *conn, Handler *handler, int content_len)
         } else {
             if(first_read) {
                 // at first, read whatever's there
-                data = IOBuf_read_some(conn->iob, &avail);
+                data = IOBuf_read(conn->iob, IOBuf_avail(conn->iob), &avail);
             } else if(conn->sendCredits > 0) {
                 // read up to credits
                 data = IOBuf_read(conn->iob, conn->sendCredits < content_len ? conn->sendCredits : content_len, &avail);
