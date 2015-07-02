@@ -100,6 +100,8 @@ char *chunked_read(IOBuf *iob, int *out_len, int *read_size)
         if(rc == 1) {
             break;
         } else if(rc == 0 && IOBuf_size(iob) - IOBuf_avail(iob) > 0) {
+            // we need data. ensure the socket is still open
+            check(!IOBuf_closed(iob), "Closed while reading from IOBuf.");
             // wait for new data
             data = IOBuf_read(iob, avail + 1, &avail);
             // examine all that we can
@@ -112,4 +114,7 @@ char *chunked_read(IOBuf *iob, int *out_len, int *read_size)
     *out_len = data_len;
     *read_size = end_pos;
     return data + data_pos;
+
+error:
+    return NULL;
 }
