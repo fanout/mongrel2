@@ -75,6 +75,7 @@ typedef struct Deliver_message {
 } Deliver_message;
 
 typedef struct Connection {
+    Server *srv;
     Request *req;
 
     IOBuf *iob;
@@ -99,6 +100,9 @@ typedef struct Connection {
     Rendez deliverRendez;
     Rendez uploadRendez;
     int sendCredits;
+
+    // if non-NULL, the value referenced will be set to 1 on destruction
+    int *destroyedPtr;
 } Connection;
 
 void Connection_destroy(Connection *conn);
@@ -108,6 +112,8 @@ Connection *Connection_create(Server *srv, int fd, int rport,
 int Connection_accept(Connection *conn);
 
 void Connection_task(void *v);
+
+void Connection_close(Connection *conn);
 
 struct Handler;
 int Connection_send_to_handler(Connection *conn, Handler *handler, char *body, int content_len, hash_t *altheaders);

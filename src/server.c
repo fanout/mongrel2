@@ -48,6 +48,7 @@
 #include "unixy.h"
 #include <signal.h>
 #include "polarssl/config.h"
+#include "connection.h"
 
 darray_t *SERVER_QUEUE = NULL;
 int RUNNING=1;
@@ -227,6 +228,29 @@ void host_destroy_cb(Route *r, RouteMap *map)
         Host_destroy((Host *)r->data);
         r->data = NULL;
     }
+}
+
+static int connection_compare(const void *a, const void *b)
+{
+    // just compare pointers
+    if(a < b) {
+        return -1;
+    } else if(a > b) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static hash_val_t connection_hash(const void *k)
+{
+    uintptr_t p = (uintptr_t)k;
+    hash_val_t v = 0;
+    int n;
+    for(n = 0; n < (int)(sizeof(uintptr_t) / sizeof(hash_val_t)); ++n) {
+        v ^= (p >> (n * sizeof(hash_val_t))) & HASH_VAL_T_MAX;
+    }
+    return v;
 }
 
 static int Server_load_ciphers(Server *srv, bstring ssl_ciphers_val)
@@ -409,11 +433,41 @@ Server *Server_create(bstring uuid, bstring default_host,
         check(rc == 0, "Failed to initialize ssl for server %s", bdata(uuid));
     }
 
+    srv->connections = hash_create(HASHCOUNT_T_MAX, connection_compare, connection_hash);
+
     return srv;
 
 error:
     Server_destroy(srv);
     return NULL;
+}
+
+
+static inline void Server_destroy_connections(Server *srv)
+{
+    hash_t *connections;
+    hscan_t hs;
+    hnode_t *node;
+
+    log_info("attempting to destroy server that has %d connections", hash_count(srv->connections));
+
+    // create a copy of the hash to operate on
+    connections = hash_create(HASHCOUNT_T_MAX, connection_compare, connection_hash);
+    hash_scan_begin(&hs, srv->connections);
+    while((node = hash_scan_next(&hs))) {
+        hash_alloc_insert(connections, hnode_getkey(node), NULL);
+    }
+
+    // now iterate on the copy
+    hash_scan_begin(&hs, connections);
+    while((node = hash_scan_next(&hs))) {
+        Connection_close((Connection *)hnode_getkey(node));
+    }
+
+    hash_free_nodes(connections);
+    hash_destroy(connections);
+
+    assert(hash_isempty(srv->connections));
 }
 
 
@@ -432,6 +486,9 @@ static inline void Server_destroy_handlers(Server *srv)
 void Server_destroy(Server *srv)
 {
     if(srv) {
+        Server_destroy_connections(srv);
+        hash_destroy(srv->connections);
+
         if(srv->use_ssl) {
             x509_crt_free(&srv->own_cert);
             pk_free(&srv->pk_key);
@@ -491,6 +548,8 @@ static inline int Server_accept(int listen_fd)
 
     rc = Connection_accept(conn);
     check(rc == 0, "Failed to register connection, overloaded.");
+
+    hash_alloc_insert(srv->connections, conn, NULL);
 
     return 0;
 
@@ -689,7 +748,7 @@ error:
 }
 
 const int SERVER_TTL = 10;
-const int SERVER_ACTIVE = 5;
+const int SERVER_ACTIVE = 2;
 
 void Server_queue_cleanup()
 {
@@ -748,4 +807,12 @@ int Server_queue_destroy()
     return 0;
 error:
     return -1;
+}
+
+void Server_unlink_connection(Server *srv, Connection *conn)
+{
+    hnode_t *node = hash_lookup(srv->connections, conn);
+    if(node) {
+        hash_delete_free(srv->connections, node);
+    }
 }

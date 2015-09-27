@@ -878,10 +878,38 @@ StateActions CONN_ACTIONS = {
 };
 
 
-void Connection_deliver_task_kill(Connection *conn)
+static void Connection_task_kill(Connection *conn)
+{
+    int rc;
+    int destroyed = 0;
+
+    if(conn) {
+        debug("Killing task for connection %p",conn);
+
+        assert(conn->destroyedPtr == NULL);
+        conn->destroyedPtr = &destroyed;
+
+        rc = Connection_deliver_raw(conn,NULL);
+        assert(rc == 0);
+
+        int sleeptime=10;
+        while(!destroyed) {
+            taskdelay(sleeptime);
+            if(sleeptime<10000) {
+                sleeptime<<=1;
+            }
+            else {
+                log_warn("Connection %p is not dying, contact authors\n",conn);
+            }
+        }
+        debug("Connection Task Killed %p",conn);
+    }
+}
+
+static void Connection_deliver_task_kill(Connection *conn)
 {
     if(conn && conn->deliverTaskStatus==DT_RUNNING) {
-        debug("Killing task for connection %p",conn);
+        debug("Killing deliver task for connection %p",conn);
         int sleeptime=10;
         while(!list_isempty(conn->deliverQueue))
         {
@@ -901,7 +929,7 @@ void Connection_deliver_task_kill(Connection *conn)
                 //*((int *)0)=1;
             }
         }
-        debug("Deliver Task Killed %p",conn);
+        debug("Connection Deliver Task Killed %p",conn);
     }
 }
 
@@ -909,6 +937,10 @@ void Connection_destroy(Connection *conn)
 {
     if(conn) {
         Connection_deliver_task_kill(conn);
+
+        if(conn->srv) {
+            Server_unlink_connection(conn->srv, conn);
+        }
 
         if(conn->deliverQueue != NULL) {
             list_process(conn->deliverQueue, NULL, free_lnode);
@@ -928,8 +960,22 @@ void Connection_destroy(Connection *conn)
         if(conn->client) free(conn->client);
         IOBuf_destroy(conn->iob);
         IOBuf_destroy(conn->proxy_iob);
+
+        if(conn->destroyedPtr) {
+            *(conn->destroyedPtr) = 1;
+        }
+
         free(conn);
     }
+}
+
+
+void Connection_close(Connection *conn)
+{
+    log_info("Connection %p: force closing", conn);
+
+    // this will block until connection main task has exited
+    Connection_task_kill(conn);
 }
 
 
@@ -1031,6 +1077,7 @@ Connection *Connection_create(Server *srv, int fd, int rport,
     Connection *conn = calloc(sizeof(Connection),1);
     check_mem(conn);
 
+    conn->srv = srv; // note: may be NULL
     conn->req = Request_create();
     conn->proxy_iob = NULL;
     conn->use_sni = 0;
@@ -1077,6 +1124,7 @@ Connection *Connection_create(Server *srv, int fd, int rport,
         conn->iob = IOBuf_create(BUFFER_SIZE, fd, IOBUF_SOCKET);
     }
 
+    log_info("Connection %p: created", conn);
     return conn;
 
 error:

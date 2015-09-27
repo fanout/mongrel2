@@ -37,6 +37,7 @@
 
 #include "adt/tst.h"
 #include "adt/darray.h"
+#include "adt/hash.h"
 #include "host.h"
 #include "routing.h"
 #include <polarssl/ssl.h>
@@ -44,6 +45,8 @@
 #include <polarssl/ctr_drbg.h>
 #include <polarssl/x509.h>
 #include <polarssl/pk.h>
+
+typedef struct Connection Connection;
 
 enum {
      /* IPv6 addr can be up to 40 chars long */
@@ -76,6 +79,7 @@ typedef struct Server {
     const int *ciphers;
     char *dhm_P;
     char *dhm_G;
+    hash_t *connections;
 } Server;
 
 Server *Server_create(bstring uuid, bstring default_host,
@@ -108,5 +112,7 @@ void Server_queue_push(Server *srv);
 #define Server_queue_latest() darray_last(SERVER_QUEUE)
 
 int Server_queue_destroy();
+
+void Server_unlink_connection(Server *srv, Connection *conn);
 
 #endif
