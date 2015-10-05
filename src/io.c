@@ -500,7 +500,7 @@ int IOBuf_shutdown(IOBuf *buf)
 
     if(buf->use_ssl && buf->handshake_performed && !buf->ssl_sent_close) {
         rc = ssl_close_notify(&buf->ssl);
-        check(rc == 0, "ssl_close_notify failed");
+        check(rc == 0, "ssl_close_notify failed with error code: %d", rc);
 
         buf->ssl_sent_close = 1;
     }
