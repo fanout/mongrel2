@@ -1,4 +1,4 @@
-CFLAGS=-g -O2 -Wall -Wextra -Isrc -Isrc/mbedtls/include -pthread -rdynamic -DNDEBUG $(OPTFLAGS) -D_FILE_OFFSET_BITS=64
+CFLAGS=-g -O2 -Wall -Wextra -Isrc -Isrc/mbedtls/include -pthread -rdynamic -DNDEBUG $(OPTFLAGS) -D_FILE_OFFSET_BITS=64 -DAUTHBIND_HELPER=\"/usr/lib/authbind/helper\"
 LIBS=-lzmq -ldl -lsqlite3 $(OPTLIBS)
 PREFIX?=/usr/local
 
@@ -240,3 +240,6 @@ macports: OPTFLAGS += -I/opt/local/include
 macports: OPTLIBS += -L/opt/local/lib -undefined dynamic_lookup
 macports: all
 
+brew: OPTFLAGS += -I/usr/local/include
+brew: OPTLIBS += -L/usr/local/lib -undefined dynamic_lookup
+brew: all
