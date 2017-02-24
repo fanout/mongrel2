@@ -29,7 +29,6 @@ enum {
 
 int MAX_LISTEN_BACKLOG = 128;
 int SET_NODELAY = 1;
-int SET_KEEPALIVE = 1;
 
 static void addr_ntop(void *sinx, char *target, int size) 
 {
@@ -317,11 +316,6 @@ int netaccept(int fd, char *server, int *port)
     if(SET_NODELAY) {
         opt = 1;
         setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, (char*)&opt, sizeof opt);
-    }
-
-    if(SET_KEEPALIVE) {
-        opt = 1;
-        setsockopt(cfd, SOL_SOCKET, SO_KEEPALIVE, (char*)&opt, sizeof opt);
     }
 
     taskstate("netaccept succeeded");
