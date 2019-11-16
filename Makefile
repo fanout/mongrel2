@@ -22,7 +22,7 @@ all: bin/mongrel2 tests m2sh procer
 
 ${OBJECTS_NOEXT}: CFLAGS += ${NOEXTCFLAGS}
 ${OBJECTS}: | builddirs
-$(RAGEL_OBJECTS): CFLAGS += -Wno-unused-const-variable -Wimplicit-fallthrough=0
+$(RAGEL_OBJECTS): CFLAGS += -Wno-unused-const-variable
 
 .PHONY: builddirs
 builddirs:

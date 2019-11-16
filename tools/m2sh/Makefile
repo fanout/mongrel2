@@ -10,7 +10,7 @@ LIB_SRC=$(filter-out src/m2sh.c,${SOURCES})
 LIB_OBJ=$(filter-out src/m2sh.o,${OBJECTS})
 RAGEL_OBJECTS=src/lexer.o src/cli.o
 
-$(RAGEL_OBJECTS): CFLAGS += -Wno-unused-const-variable -Wimplicit-fallthrough=0 -Wno-unused-parameter
+$(RAGEL_OBJECTS): CFLAGS += -Wno-unused-const-variable -Wno-unused-parameter
 
 all: ../lemon/lemon tests build/m2sh
 
